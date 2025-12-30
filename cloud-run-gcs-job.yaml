@@ -1,0 +1,12 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: automatizando-gcs-job
+spec:
+  template:
+    template:
+      spec:
+        containers:
+        - image: gcr.io/PROJECT_ID/automatizando-audesp:latest
+          command: ["python", "manage.py", "run_gcs_job", "--bucket", "PROJECT_BUCKET", "--csv-blob", "path/PLANILHA_CONTROLE_AUDESP.csv", "--xmls-prefix", "uploads/xmls/", "--output-prefix", "outputs/$(date -I)"]
+        maxRetries: 0

@@ -8,6 +8,13 @@ from django.http import HttpResponse, FileResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_http_methods
 from automatizando_core import criar_csv_rascunho, processar_final
 
+# optional Cloud Vision integration
+try:
+    from automatizando_gcs import upload_file_to_bucket, async_ocr_pdf_to_local
+except Exception:
+    upload_file_to_bucket = None
+    async_ocr_pdf_to_local = None
+
 # optional PDF parsing
 try:
     from pypdf import PdfReader
@@ -35,13 +42,26 @@ def create_csv_view(request):
                 for chunk in f.chunks():
                     out.write(chunk)
 
-            # if PDF, try to extract embedded XMLs into the folder
+            # if PDF, prefer Cloud Vision OCR (if enabled), otherwise fallback
             if filename.lower().endswith('.pdf'):
+                used_cloud = False
                 try:
-                    extract_xmls_from_pdf(dest, temp_dir)
+                    bucket = os.environ.get('GCS_BUCKET')
+                    use_cv = os.environ.get('USE_CLOUD_VISION', '0')
+                    if use_cv == '1' and upload_file_to_bucket and async_ocr_pdf_to_local and bucket:
+                        # upload and async OCR, results saved to temp_dir
+                        dest_blob = f'uploads/{int(time.time())}_{filename}'
+                        upload_file_to_bucket(bucket, dest, dest_blob)
+                        async_ocr_pdf_to_local(bucket, dest_blob, temp_dir)
+                        used_cloud = True
                 except Exception:
-                    # ignore extraction errors; continue with whatever XMLs exist
-                    pass
+                    used_cloud = False
+
+                if not used_cloud:
+                    try:
+                        extract_xmls_from_pdf(dest, temp_dir)
+                    except Exception:
+                        pass
 
         csv_path, count = criar_csv_rascunho(temp_dir)
         with open(csv_path, 'rb') as fh:
@@ -78,10 +98,23 @@ def process_view(request):
                     out.write(chunk)
 
             if f.name.lower().endswith('.pdf'):
+                used_cloud = False
                 try:
-                    extract_xmls_from_pdf(dest, xml_dir)
+                    bucket = os.environ.get('GCS_BUCKET')
+                    use_cv = os.environ.get('USE_CLOUD_VISION', '0')
+                    if use_cv == '1' and upload_file_to_bucket and async_ocr_pdf_to_local and bucket:
+                        dest_blob = f'uploads/{int(time.time())}_{f.name}'
+                        upload_file_to_bucket(bucket, dest, dest_blob)
+                        async_ocr_pdf_to_local(bucket, dest_blob, xml_dir)
+                        used_cloud = True
                 except Exception:
-                    pass
+                    used_cloud = False
+
+                if not used_cloud:
+                    try:
+                        extract_xmls_from_pdf(dest, xml_dir)
+                    except Exception:
+                        pass
 
         # processar_final irá criar pasta SAIDA_AUDESP_PRONTOS dentro de xml_dir
         sucesso = processar_final(csv_path, xml_dir)
@@ -92,6 +125,26 @@ def process_view(request):
         # zipar a saída
         zip_path = os.path.join(temp_dir, 'saida_audesp.zip')
         shutil.make_archive(zip_path.replace('.zip', ''), 'zip', saida_dir)
+
+        # If configured, upload output zip (or directory) to GCS and return link
+        upload_output = os.environ.get('UPLOAD_OUTPUT_TO_GCS', '0')
+        bucket = os.environ.get('GCS_BUCKET')
+        if upload_output == '1' and bucket:
+            try:
+                # upload whole directory under outputs/<timestamp>/
+                out_prefix = os.environ.get('OUTPUT_PREFIX', f'outputs/{int(time.time())}')
+                uploaded = []
+                if 'upload_directory_to_bucket' in globals():
+                    # prefer helper if available
+                    from automatizando_gcs import upload_directory_to_bucket, generate_signed_url
+                    uploaded = upload_directory_to_bucket(bucket, saida_dir, out_prefix.rstrip('/') + '/SAIDA_AUDESP_PRONTOS')
+                    # generate signed url for zip
+                    dest_blob = f"{out_prefix.rstrip('/')}/SAIDA_AUDESP_PRONTOS/saida_audesp.zip"
+                    signed = generate_signed_url(bucket, dest_blob)
+                    html = f'<p>Processado. <a href="{signed}">Baixar saída (zip)</a></p>'
+                    return HttpResponse(html)
+            except Exception:
+                pass
 
         with open(zip_path, 'rb') as fh:
             response = HttpResponse(fh.read(), content_type='application/zip')
