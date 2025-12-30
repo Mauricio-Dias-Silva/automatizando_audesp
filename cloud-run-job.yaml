@@ -1,0 +1,15 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: run-automatizando
+spec:
+  template:
+    template:
+      spec:
+        containers:
+        - image: gcr.io/PROJECT_ID/automatizando-audesp:latest
+          command: ["python", "manage.py", "run_script", "--create-csv", "/workspace/xmls"]
+          env:
+          - name: SECRET_KEY
+            value: "REPLACE_WITH_SECRET"
+        maxRetries: 0

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Automatizando Audesp - Web</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 40px; }
+      .box { border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 6px }
+      label { display:block; margin-bottom:6px }
+    </style>
+  </head>
+  <body>
+    <h1>Automatizando Audesp (Web)</h1>
+
+    <div class="box">
+      <h2>1) Gerar CSV (envie XMLs)</h2>
+      <form action="{% url 'main:create_csv' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label>Selecione os arquivos XML (múltiplos permitidos):</label>
+        <input type="file" name="xml_files" multiple accept=".xml" required>
+        <div style="margin-top:10px">
+          <button type="submit">Gerar CSV</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="box">
+      <h2>2) Processar CSV preenchido + XMLs</h2>
+      <form action="{% url 'main:process' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label>CSV preenchido:</label>
+        <input type="file" name="csv_file" accept=".csv" required>
+        <label style="margin-top:8px">XMLs originais (múltiplos):</label>
+        <input type="file" name="xml_files" multiple accept=".xml" required>
+        <div style="margin-top:10px">
+          <button type="submit">Processar e Baixar ZIP</button>
+        </div>
+      </form>
+    </div>
+
+    <p>Observação: uploads são processados temporariamente no servidor e removidos após a resposta.</p>
+  </body>
+</html>

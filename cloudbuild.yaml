@@ -1,0 +1,17 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/automatizando-audesp:$SHORT_SHA', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/$PROJECT_ID/automatizando-audesp:$SHORT_SHA']
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: [
+    'run', 'deploy', 'automatizando-audesp',
+    '--image', 'gcr.io/$PROJECT_ID/automatizando-audesp:$SHORT_SHA',
+    '--region', '$REGION',
+    '--platform', 'managed',
+    '--set-env-vars', 'SECRET_KEY=$SECRET_KEY,DEBUG=false,ALLOWED_HOSTS=*',
+    '--allow-unauthenticated'
+  ]
+images:
+- 'gcr.io/$PROJECT_ID/automatizando-audesp:$SHORT_SHA'
